@@ -38,6 +38,7 @@ import co.cask.cdap.internal.io.SchemaGenerator;
 import co.cask.cdap.metrics.store.MetricDatasetFactory;
 import org.apache.tephra.TransactionManager;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Collection;
@@ -54,6 +55,7 @@ import java.util.stream.IntStream;
  */
 public class MessagingMetricsProcessorServiceTest extends MetricsProcessorServiceTestBase {
 
+  @Ignore
   @Test
   public void persistMetricsTests() throws Exception {
 

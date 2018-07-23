@@ -37,6 +37,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import org.apache.tephra.TransactionManager;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ public class MetricsProcessorServiceTest extends MetricsProcessorServiceTestBase
 
   private static final String SYSTEM_METRIC_PREFIX = "system.";
 
+  @Ignore
   @Test
   public void testMetricsProcessor() throws Exception {
     injector.getInstance(TransactionManager.class).startAndWait();

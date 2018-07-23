@@ -25,7 +25,6 @@ import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.http.DefaultHttpRequestConfig;
 import co.cask.cdap.common.internal.remote.RemoteClient;
-import co.cask.cdap.common.io.Locations;
 import co.cask.cdap.data2.dataset2.ModuleConflictException;
 import co.cask.cdap.proto.DatasetInstanceConfiguration;
 import co.cask.cdap.proto.DatasetMeta;
@@ -43,11 +42,13 @@ import co.cask.common.http.HttpMethod;
 import co.cask.common.http.HttpRequest;
 import co.cask.common.http.HttpResponse;
 import com.google.common.base.Joiner;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.twill.common.Threads;
 import org.apache.twill.discovery.DiscoveryServiceClient;
 import org.apache.twill.filesystem.Location;
 import org.slf4j.Logger;
@@ -55,12 +56,23 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.management.LockInfo;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MonitorInfo;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Type;
 import java.net.ConnectException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
 /**
@@ -79,6 +91,7 @@ class DatasetServiceClient {
   private final boolean authorizationEnabled;
   private final AuthenticationContext authenticationContext;
   private final String masterShortUserName;
+  private final ExecutorService executorService;
 
   DatasetServiceClient(final DiscoveryServiceClient discoveryClient, NamespaceId namespaceId,
                        CConfiguration cConf, AuthenticationContext authenticationContext) {
@@ -91,6 +104,7 @@ class DatasetServiceClient {
     this.authorizationEnabled = cConf.getBoolean(Constants.Security.Authorization.ENABLED);
     this.authenticationContext = authenticationContext;
     this.masterShortUserName = AuthorizationUtil.getEffectiveMasterUser(cConf);
+    this.executorService = Executors.newCachedThreadPool(Threads.createDaemonThreadFactory("ds-client-%d"));
   }
 
   @Nullable
@@ -291,17 +305,7 @@ class DatasetServiceClient {
   }
 
   private HttpResponse doPut(String resource, String body) throws DatasetManagementException {
-    HttpRequest request = addUserIdHeader(remoteClient.requestBuilder(HttpMethod.PUT, resource)
-      .withBody(body))
-      .build();
-    try {
-      LOG.trace("executing {} {}", request.getMethod(), request.getURL().getPath());
-      HttpResponse response = remoteClient.execute(request);
-      LOG.trace("executed {} {}", request.getMethod(), request.getURL().getPath());
-      return response;
-    } catch (IOException e) {
-      throw new DatasetManagementException(remoteClient.createErrorMessage(request, body), e);
-    }
+    return doRequest(remoteClient.requestBuilder(HttpMethod.PUT, resource).withBody(body));
   }
 
   private HttpResponse doPost(String resource) throws DatasetManagementException {
@@ -314,15 +318,30 @@ class DatasetServiceClient {
 
   private HttpResponse doRequest(HttpRequest.Builder requestBuilder) throws DatasetManagementException {
     HttpRequest request = addUserIdHeader(requestBuilder).build();
-    try {
+    Future<HttpResponse> responseFuture = executorService.submit(() -> {
       LOG.trace("executing {} {}", request.getMethod(), request.getURL().getPath());
-      HttpResponse response = remoteClient.execute(request);
-      LOG.trace("executed {} {}", request.getMethod(), request.getURL().getPath());
-      return response;
-    } catch (ConnectException e) {
-      throw new ServiceUnavailableException(Constants.Service.DATASET_MANAGER, e);
-    } catch (IOException e) {
-      throw new DatasetManagementException(remoteClient.createErrorMessage(request, null), e);
+      try {
+        HttpResponse response = remoteClient.execute(request);
+        LOG.trace("executed {} {}", request.getMethod(), request.getURL().getPath());
+        return response;
+      } catch (ConnectException e) {
+        throw new ServiceUnavailableException(Constants.Service.DATASET_MANAGER, e);
+      } catch (IOException e) {
+        throw new DatasetManagementException(remoteClient.createErrorMessage(request, null), e);
+      }
+    });
+    try {
+      return responseFuture.get(50, TimeUnit.SECONDS);
+    } catch (TimeoutException e) {
+      logThreadDump();
+      throw Throwables.propagate(e);
+    } catch (ExecutionException e) {
+      if (e.getCause() instanceof DatasetManagementException) {
+        throw (DatasetManagementException) e.getCause();
+      }
+      throw Throwables.propagate(e.getCause());
+    } catch (InterruptedException e) {
+      throw Throwables.propagate(e);
     }
   }
 
@@ -363,4 +382,82 @@ class DatasetServiceClient {
     }
     return builder.addHeader(Constants.Security.Headers.USER_ID, userId);
   }
+
+  public static void logThreadDump() {
+    LOG.error("ashau ---------- thread dump ----------");
+    ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+    for (ThreadInfo threadInfo : bean.dumpAllThreads(true, true)) {
+      LOG.error("{}", toString(threadInfo));
+    }
+  }
+
+
+  public static String toString(ThreadInfo threadInfo) {
+    StringBuilder sb = new StringBuilder("\"" + threadInfo.getThreadName() + "\"" +
+                                           " Id=" + threadInfo.getThreadId() + " " +
+                                           threadInfo.getThreadState());
+    if (threadInfo.getLockName() != null) {
+      sb.append(" on " + threadInfo.getLockName());
+    }
+    if (threadInfo.getLockOwnerName() != null) {
+      sb.append(" owned by \"" + threadInfo.getLockOwnerName() +
+                  "\" Id=" + threadInfo.getLockOwnerId());
+    }
+    if (threadInfo.isSuspended()) {
+      sb.append(" (suspended)");
+    }
+    if (threadInfo.isInNative()) {
+      sb.append(" (in native)");
+    }
+    sb.append('\n');
+    int i = 0;
+    StackTraceElement[] stackTrace = threadInfo.getStackTrace();
+    for (; i < stackTrace.length && i < 1000; i++) {
+      StackTraceElement ste = stackTrace[i];
+      sb.append("\tat " + ste.toString());
+      sb.append('\n');
+      if (i == 0 && threadInfo.getLockInfo() != null) {
+        Thread.State ts = threadInfo.getThreadState();
+        switch (ts) {
+          case BLOCKED:
+            sb.append("\t-  blocked on " + threadInfo.getLockInfo());
+            sb.append('\n');
+            break;
+          case WAITING:
+            sb.append("\t-  waiting on " + threadInfo.getLockInfo());
+            sb.append('\n');
+            break;
+          case TIMED_WAITING:
+            sb.append("\t-  waiting on " + threadInfo.getLockInfo());
+            sb.append('\n');
+            break;
+          default:
+        }
+      }
+
+      for (MonitorInfo mi : threadInfo.getLockedMonitors()) {
+        if (mi.getLockedStackDepth() == i) {
+          sb.append("\t-  locked " + mi);
+          sb.append('\n');
+        }
+      }
+    }
+    if (i < stackTrace.length) {
+      sb.append("\t...");
+      sb.append('\n');
+    }
+
+    LockInfo[] locks = threadInfo.getLockedSynchronizers();
+    if (locks.length > 0) {
+      sb.append("\n\tNumber of locked synchronizers = " + locks.length);
+      sb.append('\n');
+      for (LockInfo li : locks) {
+        sb.append("\t- " + li);
+        sb.append('\n');
+      }
+    }
+    sb.append('\n');
+    return sb.toString();
+  }
+
 }
