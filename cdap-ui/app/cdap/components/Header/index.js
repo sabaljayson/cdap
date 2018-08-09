@@ -31,15 +31,7 @@ import getLastSelectedNamespace from 'services/get-last-selected-namespace';
 import NavLinkWrapper from 'components/NavLinkWrapper';
 import ControlCenterDropdown from 'components/Header/ControlCenterDropdown';
 import {objectQuery} from 'services/helpers';
-import {
-  hideDataPrep,
-  hidePipelines,
-  hideAnalytics,
-  hideRulesEngine,
-  hideMetadata,
-  hideHub,
-  getLogo
-} from 'services/ThemeHelper';
+import { Theme } from 'services/ThemeHelper.ts';
 
 require('./Header.scss');
 
@@ -162,7 +154,7 @@ export default class Header extends Component {
 
   renderBrandSection() {
     const baseCDAPUrl = `/ns/${this.state.currentNamespace}`;
-    const brandLogoSrc = getLogo() || '/cdap_assets/img/company_logo.png';
+    const brandLogoSrc = Theme.logo || '/cdap_assets/img/company_logo.png';
     return (
       <div className="brand-section">
           <NavLinkWrapper
@@ -187,7 +179,7 @@ export default class Header extends Component {
   }
 
   renderDataPrepLink() {
-    if (hideDataPrep()) {
+    if (Theme.showDataPrep === false) {
       return null;
     }
 
@@ -207,7 +199,7 @@ export default class Header extends Component {
   }
 
   renderPipelinesLink() {
-    if (hidePipelines()) {
+    if (Theme.showPipelines === false) {
       return null;
     }
 
@@ -233,7 +225,7 @@ export default class Header extends Component {
   }
 
   renderRulesEngineLink() {
-    if (hideRulesEngine()) {
+    if (Theme.showRulesEngine === false) {
       return null;
     }
 
@@ -253,7 +245,7 @@ export default class Header extends Component {
   }
 
   renderAnalyticsLink() {
-    if (hideAnalytics()) {
+    if (Theme.showAnalytics === false) {
       return null;
     }
 
@@ -273,7 +265,7 @@ export default class Header extends Component {
   }
 
   renderMetadataLink() {
-    if (hideMetadata()) {
+    if (Theme.showMetadata === false) {
       return null;
     }
 
@@ -286,7 +278,7 @@ export default class Header extends Component {
   }
 
   renderHubButton() {
-    if (hideHub()) {
+    if (Theme.showHub === false) {
       return null;
     }
 
