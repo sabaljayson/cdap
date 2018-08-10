@@ -17,7 +17,6 @@
 import PropTypes from 'prop-types';
 
 import React, { Component } from 'react';
-import T from 'i18n-react';
 import NamespaceStore from 'services/NamespaceStore';
 import NamespaceDropdown from 'components/NamespaceDropdown';
 import ProductDropdown from 'components/Header/ProductDropdown';
@@ -33,7 +32,6 @@ import globalEvents from 'services/global-events';
 import getLastSelectedNamespace from 'services/get-last-selected-namespace';
 import ControlCenterDropdown from 'components/Header/ControlCenterDropdown';
 import {objectQuery} from 'services/helpers';
-import { Theme } from 'services/ThemeHelper';
 import BrandSection from 'components/Header/BrandSection';
 import DataPrepLink from 'components/Header/DataPrepLink';
 import PipelinesLink from 'components/Header/PipelinesLink';
