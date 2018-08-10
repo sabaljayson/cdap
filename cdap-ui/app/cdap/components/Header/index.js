@@ -20,10 +20,6 @@ import React, { Component } from 'react';
 import NamespaceStore from 'services/NamespaceStore';
 import NamespaceDropdown from 'components/NamespaceDropdown';
 import ProductDropdown from 'components/Header/ProductDropdown';
-<<<<<<< HEAD
-import CaskMarketButton from 'components/Header/CaskMarketButton';
-=======
->>>>>>> 3ef6a2aae0... Extracts out render methods into tsx components, and uses new React context API to avoid passing down props
 import {MyNamespaceApi} from 'api/namespace';
 import NamespaceActions from 'services/NamespaceStore/NamespaceActions';
 import classnames from 'classnames';
