@@ -210,40 +210,6 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
     }
   };
 
-  if (vm.runId) {
-    // Get Initial Status
-    myLogsApi.getLogsMetadata({
-      namespace : vm.namespaceId,
-      appId : vm.appId,
-      programType : vm.programType,
-      programId : vm.programId,
-      runId : vm.runId
-    }).$promise.then(
-      (statusRes) => {
-        LogViewerStore.dispatch({
-          type: LOGVIEWERSTORE_ACTIONS.SET_STATUS,
-          payload: {
-            status: statusRes.status,
-            startTime: statusRes.starting,
-            endTime: statusRes.end
-          }
-        });
-        vm.setProgramMetadata(statusRes.status);
-      },
-      (statusErr) => {
-        console.log('ERROR: ', statusErr);
-
-        if (statusErr.statusCode === 404) {
-          myAlertOnValium.show({
-            type: 'danger',
-            content: statusErr.data
-          });
-        }
-      });
-  } else {
-    vm.loading = false;
-  }
-
   vm.filterSearch = () => {
     // Rerender data
     vm.renderData();
@@ -350,7 +316,7 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
   };
 
   function validUrl() {
-    return vm.namespaceId && vm.appId && vm.programType && vm.runId && vm.fromOffset;
+    return vm.namespaceId && vm.appId && vm.programType;
   }
 
   function requestWithOffset() {
@@ -372,15 +338,28 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
       filter += showCondensedLogsQuery;
     }
 
-    myLogsApi.nextLogsJsonOffset({
+    if (vm.filter) {
+      filter = `${filter} AND {vm.filter}`;
+    }
+
+    let api;
+    let queryParams = {
       'namespace' : vm.namespaceId,
       'appId' : vm.appId,
       'programType' : vm.programType,
       'programId' : vm.programId,
-      'runId' : vm.runId,
       'fromOffset' : vm.fromOffset,
       filter
-    }).$promise.then(
+    };
+
+    if (!vm.runId) {
+      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
+    } else {
+      queryParams.runId = vm.runId;
+      api = myLogsApi.nextLogsJsonOffset(queryParams);
+    }
+
+    api.$promise.then(
       (res) => {
         vm.errorRetrievingLogs = false;
         vm.loading = false;
@@ -420,6 +399,9 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
   }
 
   function getStatus () {
+    if (!vm.runId) {
+      return;
+    }
     myLogsApi.getLogsMetadata({
       namespace : vm.namespaceId,
       appId : vm.appId,
@@ -459,15 +441,28 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
       filter += showCondensedLogsQuery;
     }
 
-    myLogsApi.nextLogsJsonOffset({
+    if (vm.filter) {
+      filter = `${filter} AND ${vm.filter}`;
+    }
+
+    let api;
+    let queryParams = {
       'namespace' : vm.namespaceId,
       'appId' : vm.appId,
       'programType' : vm.programType,
       'programId' : vm.programId,
-      'runId' : vm.runId,
       'fromOffset' : vm.fromOffset,
       filter
-    }).$promise.then(
+    };
+
+    if (!vm.runId) {
+      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
+    } else {
+      queryParams.runId = vm.runId;
+      api = myLogsApi.nextLogsJsonOffset(queryParams);
+    }
+
+    api.$promise.then(
       (res) => {
         vm.errorRetrievingLogs = false;
         vm.loading = false;
@@ -564,15 +559,29 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
       filter += showCondensedLogsQuery;
     }
 
-    myLogsApi.nextLogsJsonOffset({
+    if (vm.filter) {
+      filter = `${filter} AND ${vm.filter}`;
+    }
+
+    let api;
+    let queryParams = {
       namespace : vm.namespaceId,
       appId : vm.appId,
       programType : vm.programType,
       programId : vm.programId,
-      runId : vm.runId,
-      fromOffset: vm.fromOffset,
       filter
-    }).$promise.then(
+    };
+    if (vm.fromOffset) {
+      queryParams.fromOffset = vm.fromOffset;
+    }
+    if (!vm.runId) {
+      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
+    } else {
+      queryParams.runId = vm.runId;
+      api = myLogsApi.nextLogsJsonOffset(queryParams);
+    }
+
+    api.$promise.then(
       (res) => {
         vm.errorRetrievingLogs = false;
         vm.loading = false;
@@ -712,7 +721,9 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
     // Whenever we change the log level filter, the data needs
     // to start from scratch
     vm.data = [];
-    vm.fromOffset = -10000 + '.' + vm.startTimeMs;
+    if (vm.startTimeMs) {
+      vm.fromOffset = -10000 + '.' + vm.startTimeMs;
+    }
 
     vm.selectedLogLevel = eventType;
     startTimeRequest();
@@ -823,6 +834,44 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
       stopPoll();
     }
   });
+
+  if (vm.runId) {
+    // Get Initial Status
+    myLogsApi.getLogsMetadata({
+      namespace : vm.namespaceId,
+      appId : vm.appId,
+      programType : vm.programType,
+      programId : vm.programId,
+      runId : vm.runId
+    }).$promise.then(
+      (statusRes) => {
+        LogViewerStore.dispatch({
+          type: LOGVIEWERSTORE_ACTIONS.SET_STATUS,
+          payload: {
+            status: statusRes.status,
+            startTime: statusRes.starting,
+            endTime: statusRes.end
+          }
+        });
+        vm.setProgramMetadata(statusRes.status);
+      },
+      (statusErr) => {
+        console.log('ERROR: ', statusErr);
+
+        if (statusErr.statusCode === 404) {
+          myAlertOnValium.show({
+            type: 'danger',
+            content: statusErr.data
+          });
+        }
+      });
+  } else {
+    vm.loading = false;
+    vm.startTimeMs = vm.startTime;
+    vm.fromOffset = -10000 + '.' + vm.startTimeMs;
+    startTimeRequest();
+  }
+
 }
 
 const link = (scope) => {
@@ -842,6 +891,9 @@ angular.module(PKG.name + '.commons')
         programType: '@',
         programId: '@',
         runId: '@',
+        startTime: '@',
+        endTime: '@',
+        filter: '@',
         getDownloadFilename: '&',
         entityName: '@',
         isPipeline: '@'
