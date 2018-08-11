@@ -333,33 +333,7 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
       stopPoll();
     }
 
-    let filter = `loglevel=${vm.selectedLogLevel}`;
-    if (!vm.includeSystemLogs) {
-      filter += showCondensedLogsQuery;
-    }
-
-    if (vm.filter) {
-      filter = `${filter} AND {vm.filter}`;
-    }
-
-    let api;
-    let queryParams = {
-      'namespace' : vm.namespaceId,
-      'appId' : vm.appId,
-      'programType' : vm.programType,
-      'programId' : vm.programId,
-      'fromOffset' : vm.fromOffset,
-      filter
-    };
-
-    if (!vm.runId) {
-      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
-    } else {
-      queryParams.runId = vm.runId;
-      api = myLogsApi.nextLogsJsonOffset(queryParams);
-    }
-
-    api.$promise.then(
+    fetchLogs().$promise.then(
       (res) => {
         vm.errorRetrievingLogs = false;
         vm.loading = false;
@@ -402,67 +376,14 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
     if (!vm.runId) {
       return;
     }
-    myLogsApi.getLogsMetadata({
-      namespace : vm.namespaceId,
-      appId : vm.appId,
-      programType : vm.programType,
-      programId : vm.programId,
-      runId : vm.runId
-    }).$promise.then(
-      (statusRes) => {
-        LogViewerStore.dispatch({
-          type: LOGVIEWERSTORE_ACTIONS.SET_STATUS,
-          payload: {
-            status: statusRes.status,
-            startTime: statusRes.starting,
-            endTime: statusRes.end
-          }
-        });
-        vm.setProgramMetadata(statusRes.status);
-
-        if (vm.statusType !== 0) {
-          if (pollStarted) {
-            stopPoll();
-          }
-        }
-      },
-      (statusErr) => {
-        console.log('ERROR: ', statusErr);
-      }
-    );
+    fetchLogsMetadata();
   }
 
   // NEW IMPLEMENTATION
   function pollForNewLogs() {
     pollStarted = true;
 
-    let filter = `loglevel=${vm.selectedLogLevel}`;
-    if (!vm.includeSystemLogs) {
-      filter += showCondensedLogsQuery;
-    }
-
-    if (vm.filter) {
-      filter = `${filter} AND ${vm.filter}`;
-    }
-
-    let api;
-    let queryParams = {
-      'namespace' : vm.namespaceId,
-      'appId' : vm.appId,
-      'programType' : vm.programType,
-      'programId' : vm.programId,
-      'fromOffset' : vm.fromOffset,
-      filter
-    };
-
-    if (!vm.runId) {
-      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
-    } else {
-      queryParams.runId = vm.runId;
-      api = myLogsApi.nextLogsJsonOffset(queryParams);
-    }
-
-    api.$promise.then(
+    fetchLogs().$promise.then(
       (res) => {
         vm.errorRetrievingLogs = false;
         vm.loading = false;
@@ -554,34 +475,7 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
     // binds window element to check whether scrollbar has appeared on resize event
     angular.element($window).bind('resize', checkForScrollbar);
 
-    let filter = `loglevel=${vm.selectedLogLevel}`;
-    if (!vm.includeSystemLogs) {
-      filter += showCondensedLogsQuery;
-    }
-
-    if (vm.filter) {
-      filter = `${filter} AND ${vm.filter}`;
-    }
-
-    let api;
-    let queryParams = {
-      namespace : vm.namespaceId,
-      appId : vm.appId,
-      programType : vm.programType,
-      programId : vm.programId,
-      filter
-    };
-    if (vm.fromOffset) {
-      queryParams.fromOffset = vm.fromOffset;
-    }
-    if (!vm.runId) {
-      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
-    } else {
-      queryParams.runId = vm.runId;
-      api = myLogsApi.nextLogsJsonOffset(queryParams);
-    }
-
-    api.$promise.then(
+    fetchLogs().$promise.then(
       (res) => {
         vm.errorRetrievingLogs = false;
         vm.loading = false;
@@ -837,6 +731,45 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
 
   if (vm.runId) {
     // Get Initial Status
+    fetchLogsMetadata();
+  } else {
+    vm.loading = false;
+    vm.startTimeMs = vm.startTime;
+    vm.fromOffset = -10000 + '.' + vm.startTimeMs;
+    startTimeRequest();
+  }
+
+  function fetchLogs() {
+    let filter = `loglevel=${vm.selectedLogLevel}`;
+    if (!vm.includeSystemLogs) {
+      filter += showCondensedLogsQuery;
+    }
+
+    if (vm.filter) {
+      filter = `${filter} AND ${vm.filter}`;
+    }
+
+    let api;
+    let queryParams = {
+      namespace : vm.namespaceId,
+      appId : vm.appId,
+      programType : vm.programType,
+      programId : vm.programId,
+      filter
+    };
+    if (vm.fromOffset) {
+      queryParams.fromOffset = vm.fromOffset;
+    }
+    if (!vm.runId) {
+      api = myLogsApi.nextProgramLogsJsonOffset(queryParams);
+    } else {
+      queryParams.runId = vm.runId;
+      api = myLogsApi.nextLogsJsonOffset(queryParams);
+    }
+    return api;
+  }
+
+  function fetchLogsMetadata() {
     myLogsApi.getLogsMetadata({
       namespace : vm.namespaceId,
       appId : vm.appId,
@@ -865,13 +798,7 @@ function LogViewerController ($scope, $window, LogViewerStore, myLogsApi, LOGVIE
           });
         }
       });
-  } else {
-    vm.loading = false;
-    vm.startTimeMs = vm.startTime;
-    vm.fromOffset = -10000 + '.' + vm.startTimeMs;
-    startTimeRequest();
   }
-
 }
 
 const link = (scope) => {
